@@ -9,6 +9,7 @@ import (
 	"github.com/scjtqs2/bot_adapter/pb/entity"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
+	"math/rand"
 	"strings"
 	"time"
 )
@@ -23,11 +24,13 @@ func parseMsg(data string) {
 			_ = json.Unmarshal([]byte(msg.Raw), &req)
 			go quma(req.RawMessage, 0, req.UserID, false)
 			go ocr(req.RawMessage, 0, req.UserID, false)
+			go rollNum(req.RawMessage, 0, req.UserID, false)
 		case event.MESSAGE_TYPE_GROUP:
 			var req event.MessageGroup
 			_ = json.Unmarshal([]byte(msg.Raw), &req)
 			go quma(req.RawMessage, req.Sender.UserID, req.GroupID, true)
 			go ocr(req.RawMessage, req.Sender.UserID, req.GroupID, true)
+			go rollNum(req.RawMessage, req.Sender.UserID, req.GroupID, true)
 		}
 	case "notice": // 通知事件
 		switch msg.Get("notice_type").String() {
@@ -126,6 +129,7 @@ func quma(message string, atqq int64, fromqq int64, isGroup bool) {
 	}
 }
 
+// ocr ocr识别图片
 func ocr(message string, atqq int64, fromqq int64, isGroup bool) {
 	cacheKey := fmt.Sprintf("OCR_STATUS_%d_%d", atqq, fromqq)
 	c := cache.Get(cacheKey)
@@ -180,4 +184,26 @@ func ocr(message string, atqq int64, fromqq int64, isGroup bool) {
 		})
 		return
 	}
+}
+
+// rollNum 随机roll点数 0-100
+func rollNum(message string, atqq int64, fromqq int64, isGroup bool) {
+	if strings.HasPrefix(message, "#ROLL") {
+		r := rand.New(rand.NewSource(time.Now().Unix()))
+		n := r.Intn(100)
+		text := fmt.Sprintf("你得到了roll点数：%d", n)
+		if isGroup {
+			_, _ = bot_adapter_client.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
+				GroupId: fromqq,
+				Message: []byte(fmt.Sprintf("%s%s", coolq.EnAtCode(fmt.Sprintf("%d", atqq)), text)),
+			})
+			return
+		}
+		_, _ = bot_adapter_client.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
+			UserId:  fromqq,
+			Message: []byte(text),
+		})
+		return
+	}
+
 }
