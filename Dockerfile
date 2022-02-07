@@ -32,7 +32,7 @@ ENV APP_ENCRYPT_KEY ""
 ENV APP_ID ""
 # APPSECRET
 ENV APP_SECRET ""
-ENV ADAPTER_ADDR "bot_adapter:8001"
+ENV ADAPTER_ADDR "bot-adapter:8001"
 
 COPY ./init.sh /
 COPY --from=builder /build/bot_app /usr/bin/bot_app

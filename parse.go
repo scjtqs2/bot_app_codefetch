@@ -101,13 +101,15 @@ func quma(message string, atqq int64, fromqq int64, isGroup bool) {
 		if isGroup {
 			_, _ = bot_adapter_client.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
 				GroupId: fromqq,
-				Message: []byte(fmt.Sprintf("%s%s", coolq.EnAtCode(fmt.Sprintf("%d", atqq)), message)),
+				Message: []byte(message),
+				AutoEscape: true,
 			})
 			return
 		}
 		_, _ = bot_adapter_client.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
 			UserId:  fromqq,
 			Message: []byte(message),
+			AutoEscape: true,
 		})
 		return
 	}
