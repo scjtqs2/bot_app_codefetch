@@ -22,15 +22,17 @@ func parseMsg(data string) {
 		case event.MESSAGE_TYPE_PRIVATE:
 			var req event.MessagePrivate
 			_ = json.Unmarshal([]byte(msg.Raw), &req)
-			go quma(req.RawMessage, 0, req.UserID, false)
-			go ocr(req.RawMessage, 0, req.UserID, false)
-			go rollNum(req.RawMessage, 0, req.UserID, false)
+			go Quma(req.RawMessage, 0, req.UserID, false)
+			// go Zhuanma(req.RawMessage, 0, req.UserID, false)
+			go Ocr(req.RawMessage, 0, req.UserID, false)
+			go RollNum(req.RawMessage, 0, req.UserID, false)
 		case event.MESSAGE_TYPE_GROUP:
 			var req event.MessageGroup
 			_ = json.Unmarshal([]byte(msg.Raw), &req)
-			go quma(req.RawMessage, req.Sender.UserID, req.GroupID, true)
-			go ocr(req.RawMessage, req.Sender.UserID, req.GroupID, true)
-			go rollNum(req.RawMessage, req.Sender.UserID, req.GroupID, true)
+			go Quma(req.RawMessage, req.Sender.UserID, req.GroupID, true)
+			// go Zhuanma(req.RawMessage, req.Sender.UserID, req.GroupID, true)
+			go Ocr(req.RawMessage, req.Sender.UserID, req.GroupID, true)
+			go RollNum(req.RawMessage, req.Sender.UserID, req.GroupID, true)
 		}
 	case "notice": // 通知事件
 		switch msg.Get("notice_type").String() {
@@ -91,8 +93,8 @@ func parseMsg(data string) {
 	}
 }
 
-// quma 取码
-func quma(message string, atqq int64, fromqq int64, isGroup bool) {
+// Quma 取码
+func Quma(message string, atqq int64, fromqq int64, isGroup bool) {
 	cacheKey := fmt.Sprintf("QUMA_STATUS_%d_%d", atqq, fromqq)
 	c := cache.Get(cacheKey)
 	if c != nil && !c.Expired() && c.Value() != nil {
@@ -100,15 +102,15 @@ func quma(message string, atqq int64, fromqq int64, isGroup bool) {
 		cache.Delete(cacheKey)
 		if isGroup {
 			_, _ = bot_adapter_client.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
-				GroupId: fromqq,
-				Message: []byte(message),
+				GroupId:    fromqq,
+				Message:    []byte(message),
 				AutoEscape: true,
 			})
 			return
 		}
 		_, _ = bot_adapter_client.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
-			UserId:  fromqq,
-			Message: []byte(message),
+			UserId:     fromqq,
+			Message:    []byte(message),
 			AutoEscape: true,
 		})
 		return
@@ -131,8 +133,49 @@ func quma(message string, atqq int64, fromqq int64, isGroup bool) {
 	}
 }
 
-// ocr ocr识别图片
-func ocr(message string, atqq int64, fromqq int64, isGroup bool) {
+// Zhuanma 转码
+// 容易风控，一般不开启
+func Zhuanma(message string, atqq int64, fromqq int64, isGroup bool) {
+	cacheKey := fmt.Sprintf("ZHUANMA_STATUS_%d_%d", atqq, fromqq)
+	c := cache.Get(cacheKey)
+	if c != nil && !c.Expired() && c.Value() != nil {
+		// 有状态，直接回复string的消息
+		cache.Delete(cacheKey)
+		if isGroup {
+			_, _ = bot_adapter_client.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
+				GroupId:    fromqq,
+				Message:    []byte(message),
+				AutoEscape: false,
+			})
+			return
+		}
+		_, _ = bot_adapter_client.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
+			UserId:     fromqq,
+			Message:    []byte(message),
+			AutoEscape: false,
+		})
+		return
+	}
+	if strings.HasPrefix(message, "#转码") {
+		cache.Set(cacheKey, 1, time.Minute)
+		text := "请于一分钟内发送需要转码的CQ码"
+		if isGroup {
+			_, _ = bot_adapter_client.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
+				GroupId: fromqq,
+				Message: []byte(fmt.Sprintf("%s%s", coolq.EnAtCode(fmt.Sprintf("%d", atqq)), text)),
+			})
+			return
+		}
+		_, _ = bot_adapter_client.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
+			UserId:  fromqq,
+			Message: []byte(text),
+		})
+		return
+	}
+}
+
+// Ocr ocr识别图片
+func Ocr(message string, atqq int64, fromqq int64, isGroup bool) {
 	cacheKey := fmt.Sprintf("OCR_STATUS_%d_%d", atqq, fromqq)
 	c := cache.Get(cacheKey)
 	if c != nil && !c.Expired() && c.Value() != nil {
@@ -147,7 +190,7 @@ func ocr(message string, atqq int64, fromqq int64, isGroup bool) {
 					Image: file,
 				})
 				if err != nil {
-					log.Errorf("获取 ocr 错误：%v", err)
+					log.Errorf("获取 Ocr 错误：%v", err)
 					return
 				}
 				text := ""
@@ -188,8 +231,8 @@ func ocr(message string, atqq int64, fromqq int64, isGroup bool) {
 	}
 }
 
-// rollNum 随机roll点数 0-100
-func rollNum(message string, atqq int64, fromqq int64, isGroup bool) {
+// RollNum 随机roll点数 0-100
+func RollNum(message string, atqq int64, fromqq int64, isGroup bool) {
 	if strings.HasPrefix(message, "#ROLL") {
 		r := rand.New(rand.NewSource(time.Now().Unix()))
 		n := r.Intn(100)
