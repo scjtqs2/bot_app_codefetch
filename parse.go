@@ -4,14 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/scjtqs2/bot_adapter/coolq"
 	"github.com/scjtqs2/bot_adapter/event"
 	"github.com/scjtqs2/bot_adapter/pb/entity"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
-	"math/rand"
-	"strings"
-	"time"
 )
 
 func parseMsg(data string) {
@@ -23,14 +25,18 @@ func parseMsg(data string) {
 			var req event.MessagePrivate
 			_ = json.Unmarshal([]byte(msg.Raw), &req)
 			go Quma(req.RawMessage, 0, req.UserID, false)
-			// go Zhuanma(req.RawMessage, 0, req.UserID, false)
+			if os.Getenv("ZHUANMA_ENABLE") == "true" {
+				go Zhuanma(req.RawMessage, 0, req.UserID, false)
+			}
 			go Ocr(req.RawMessage, 0, req.UserID, false)
 			go RollNum(req.RawMessage, 0, req.UserID, false)
 		case event.MESSAGE_TYPE_GROUP:
 			var req event.MessageGroup
 			_ = json.Unmarshal([]byte(msg.Raw), &req)
 			go Quma(req.RawMessage, req.Sender.UserID, req.GroupID, true)
-			// go Zhuanma(req.RawMessage, req.Sender.UserID, req.GroupID, true)
+			if os.Getenv("ZHUANMA_ENABLE") == "true" {
+				go Zhuanma(req.RawMessage, req.Sender.UserID, req.GroupID, true)
+			}
 			go Ocr(req.RawMessage, req.Sender.UserID, req.GroupID, true)
 			go RollNum(req.RawMessage, req.Sender.UserID, req.GroupID, true)
 		}
@@ -101,14 +107,14 @@ func Quma(message string, atqq int64, fromqq int64, isGroup bool) {
 		// 有状态，直接回复string的消息
 		cache.Delete(cacheKey)
 		if isGroup {
-			_, _ = bot_adapter_client.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
+			_, _ = botAdapterClient.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
 				GroupId:    fromqq,
 				Message:    []byte(message),
 				AutoEscape: true,
 			})
 			return
 		}
-		_, _ = bot_adapter_client.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
+		_, _ = botAdapterClient.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
 			UserId:     fromqq,
 			Message:    []byte(message),
 			AutoEscape: true,
@@ -119,13 +125,13 @@ func Quma(message string, atqq int64, fromqq int64, isGroup bool) {
 		cache.Set(cacheKey, 1, time.Minute)
 		text := "请于一分钟内发送需要取码的信息"
 		if isGroup {
-			_, _ = bot_adapter_client.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
+			_, _ = botAdapterClient.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
 				GroupId: fromqq,
 				Message: []byte(fmt.Sprintf("%s%s", coolq.EnAtCode(fmt.Sprintf("%d", atqq)), text)),
 			})
 			return
 		}
-		_, _ = bot_adapter_client.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
+		_, _ = botAdapterClient.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
 			UserId:  fromqq,
 			Message: []byte(text),
 		})
@@ -142,14 +148,14 @@ func Zhuanma(message string, atqq int64, fromqq int64, isGroup bool) {
 		// 有状态，直接回复string的消息
 		cache.Delete(cacheKey)
 		if isGroup {
-			_, _ = bot_adapter_client.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
+			_, _ = botAdapterClient.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
 				GroupId:    fromqq,
 				Message:    []byte(message),
 				AutoEscape: false,
 			})
 			return
 		}
-		_, _ = bot_adapter_client.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
+		_, _ = botAdapterClient.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
 			UserId:     fromqq,
 			Message:    []byte(message),
 			AutoEscape: false,
@@ -160,13 +166,13 @@ func Zhuanma(message string, atqq int64, fromqq int64, isGroup bool) {
 		cache.Set(cacheKey, 1, time.Minute)
 		text := "请于一分钟内发送需要转码的CQ码"
 		if isGroup {
-			_, _ = bot_adapter_client.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
+			_, _ = botAdapterClient.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
 				GroupId: fromqq,
 				Message: []byte(fmt.Sprintf("%s%s", coolq.EnAtCode(fmt.Sprintf("%d", atqq)), text)),
 			})
 			return
 		}
-		_, _ = bot_adapter_client.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
+		_, _ = botAdapterClient.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
 			UserId:  fromqq,
 			Message: []byte(text),
 		})
@@ -186,7 +192,7 @@ func Ocr(message string, atqq int64, fromqq int64, isGroup bool) {
 		for _, v := range msgs {
 			if v.Type == coolq.IMAGE {
 				file = v.Data["file"]
-				res, err := bot_adapter_client.CustomOcrImage(context.TODO(), &entity.CustomOcrImageReq{
+				res, err := botAdapterClient.CustomOcrImage(context.TODO(), &entity.CustomOcrImageReq{
 					Image: file,
 				})
 				if err != nil {
@@ -198,32 +204,31 @@ func Ocr(message string, atqq int64, fromqq int64, isGroup bool) {
 					text += t.GetText()
 				}
 				if isGroup {
-					_, _ = bot_adapter_client.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
+					_, _ = botAdapterClient.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
 						GroupId: fromqq,
 						Message: []byte(fmt.Sprintf("%s%s", coolq.EnAtCode(fmt.Sprintf("%d", atqq)), text)),
 					})
 					return
 				}
-				_, _ = bot_adapter_client.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
+				_, _ = botAdapterClient.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
 					UserId:  fromqq,
 					Message: []byte(text),
 				})
 				return
 			}
 		}
-
 	}
 	if strings.HasPrefix(message, "#OCR") {
 		cache.Set(cacheKey, 1, time.Minute)
 		text := "请于一分钟内发送需要ocr的图片"
 		if isGroup {
-			_, _ = bot_adapter_client.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
+			_, _ = botAdapterClient.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
 				GroupId: fromqq,
 				Message: []byte(fmt.Sprintf("%s%s", coolq.EnAtCode(fmt.Sprintf("%d", atqq)), text)),
 			})
 			return
 		}
-		_, _ = bot_adapter_client.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
+		_, _ = botAdapterClient.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
 			UserId:  fromqq,
 			Message: []byte(text),
 		})
@@ -238,17 +243,16 @@ func RollNum(message string, atqq int64, fromqq int64, isGroup bool) {
 		n := r.Intn(100)
 		text := fmt.Sprintf("你得到了roll点数：%d", n)
 		if isGroup {
-			_, _ = bot_adapter_client.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
+			_, _ = botAdapterClient.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
 				GroupId: fromqq,
 				Message: []byte(fmt.Sprintf("%s%s", coolq.EnAtCode(fmt.Sprintf("%d", atqq)), text)),
 			})
 			return
 		}
-		_, _ = bot_adapter_client.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
+		_, _ = botAdapterClient.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
 			UserId:  fromqq,
 			Message: []byte(text),
 		})
 		return
 	}
-
 }

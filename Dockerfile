@@ -33,6 +33,7 @@ ENV APP_ID ""
 # APPSECRET
 ENV APP_SECRET ""
 ENV ADAPTER_ADDR "bot-adapter:8001"
+ENV ZHUANMA_ENABLE "false"
 
 COPY ./init.sh /
 COPY --from=builder /build/bot_app /usr/bin/bot_app
