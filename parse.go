@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -150,16 +152,61 @@ func Zhuanma(message string, atqq int64, fromqq int64, isGroup bool) {
 		if isGroup {
 			_, _ = botAdapterClient.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
 				GroupId:    fromqq,
-				Message:    []byte(message),
+				Message:    []byte(decodeText(message)),
 				AutoEscape: false,
 			})
 			return
 		}
 		_, _ = botAdapterClient.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
 			UserId:     fromqq,
-			Message:    []byte(message),
+			Message:    []byte(decodeText(message)),
 			AutoEscape: false,
 		})
+		return
+	}
+	// 直接一条命令转码
+	patten := `^#转码\s(-.{1,10}? )?(.*)$`
+	reg := regexp.MustCompile(patten)
+	if reg.MatchString(message) {
+		keys := reg.FindStringSubmatch(message)
+		var code string
+		switch strings.TrimSpace(keys[1]) {
+		case "-image":
+			code = coolq.EnImageCode(strings.TrimSpace(keys[2]), 0)
+		case "-json":
+			reg2 := regexp.MustCompile(`^-id\s+(\d{1,10})\s+(.*)$`) // #转码 -json -id 1 {json}
+			str := strings.TrimSpace(keys[2])
+			if !reg2.MatchString(str) {
+				code = "错误的json指令 eg: #转码 -json -id 1 {json}"
+			} else {
+				keys2 := reg2.FindStringSubmatch(str)
+				id, _ := strconv.Atoi(strings.TrimSpace(keys2[1]))
+				code = coolq.EnJSONCode(decodeText(strings.TrimSpace(keys2[2])), id)
+			}
+		case "-xml":
+			reg2 := regexp.MustCompile(`^-id\s+(\d{1,10})\s+(.*)$`) // #转码 -xml -id 1 <xml>
+			str := strings.TrimSpace(keys[2])
+			if !reg2.MatchString(str) {
+				code = "错误的xml指令 eg: #转码 -xml -id 1 <xml>"
+			} else {
+				keys2 := reg2.FindStringSubmatch(str)
+				id, _ := strconv.Atoi(strings.TrimSpace(keys2[1]))
+				code = coolq.EnXMLCode(decodeText(strings.TrimSpace(keys2[2])), id)
+			}
+		}
+		if code != "" {
+			if isGroup {
+				_, _ = botAdapterClient.SendGroupMsg(context.TODO(), &entity.SendGroupMsgReq{
+					GroupId: fromqq,
+					Message: []byte(code),
+				})
+				return
+			}
+			_, _ = botAdapterClient.SendPrivateMsg(context.TODO(), &entity.SendPrivateMsgReq{
+				UserId:  fromqq,
+				Message: []byte(code),
+			})
+		}
 		return
 	}
 	if strings.HasPrefix(message, "#转码") {
@@ -255,4 +302,12 @@ func RollNum(message string, atqq int64, fromqq int64, isGroup bool) {
 		})
 		return
 	}
+}
+
+// decodeText 解码文字
+func decodeText(text string) string {
+	text = strings.ReplaceAll(text, "&amp;", "&")
+	text = strings.ReplaceAll(text, "&#91;", "[")
+	text = strings.ReplaceAll(text, "&#93;", "]")
+	return text
 }
